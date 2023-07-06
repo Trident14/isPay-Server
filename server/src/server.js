@@ -8,7 +8,7 @@ import { DeleteCustomer, updateBalance } from './handlers/admin.js';
 
 const app=express();
 
-mongoose.connect(process.env.DBkey)
+mongoose.connect(process.env.DBkey);
 
 app.use(cors())
 
