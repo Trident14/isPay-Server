@@ -1,7 +1,8 @@
 import express from 'express'
 import router from './router.js';
 import { protect, protect2 } from './modules/auth.js';
-import mongoose from 'mongoose'
+import mongoose from 'mongoose';
+import cors from 'cors'
 import { createNewUser, signin } from './handlers/users.js';
 import { DeleteCustomer, updateBalance } from './handlers/admin.js';
 
@@ -9,7 +10,10 @@ const app=express();
 
 mongoose.connect(process.env.DBkey)
 
+app.use(cors())
+
 app.use(express.json())
+
 app.use(express.urlencoded({extended:true}))
 
 
