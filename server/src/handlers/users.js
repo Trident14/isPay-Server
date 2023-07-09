@@ -33,10 +33,9 @@ export const createNewUser=async(req,res)=>{
 
 export const signin= async(req,res)=>{
     const user=await UserModel.findOne({username:req.body.username});
-    if(!user){
-        res.json('NAAAA')
+     if(!user){
+        return res.json({message:'NAAAA'})
     }
-  
     const isValid=await comparePassword(req.body.password,user.password)
     
     if(!isValid){
