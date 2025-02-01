@@ -10,102 +10,93 @@ const router=Router();
 router.patch('/dashboard/transfer', async (req, res, next) => {
   const user = req.user;
   try {
+    if (user.username === req.body.username) {
+      return res.status(400).json({ message: "You cannot transfer money to yourself" });
+    }
+
     const existingUser = await BalanceModel.findOne({ username: user.username });
     if (!existingUser) {
-      return res.status(401).json({message:"user Not found"});
+      return res.status(401).json({ message: "User not found" });
     }
 
     const targetAccount = await BalanceModel.findOne({ username: req.body.username });
     if (!targetAccount) {
-      return res.status(401).json({message:"user Not found"});
+      return res.status(401).json({ message: "Target user not found" });
     }
 
     const transferAmount = req.body.amount;
-    const savingGoals = await savingModel.find({
-      username: user.username,
-    });
+    const savingGoals = await savingModel.find({ username: user.username });
 
     if (existingUser.balance >= transferAmount) {
-      // Debit the transfer amount from the balance.
       existingUser.balance -= transferAmount;
+      targetAccount.balance += transferAmount;
 
-      // Create a transaction record for the debit.
+      // Create transaction records
       const transaction = new transactionModel({
         _id: new mongoose.Types.ObjectId(),
         username: existingUser.username,
         transaction_type: "debit",
         amount: transferAmount,
         balance: existingUser.balance,
-        sendTo:targetAccount.username,
+        sendTo: targetAccount.username,
         created_at: Date.now(),
       });
-      await transaction.save();
 
-      // Credit the transfer amount to the target account.
-      targetAccount.balance += transferAmount;
-
-      // Create a transaction record for the credit.
       const transaction1 = new transactionModel({
         _id: new mongoose.Types.ObjectId(),
         username: targetAccount.username,
         transaction_type: "credit",
         amount: transferAmount,
         balance: targetAccount.balance,
-        sendTo:targetAccount.username,
+        sendTo: targetAccount.username,
         created_at: Date.now(),
       });
-      await transaction1.save();
 
-      // Save the updated balance and target account.
+      await transaction.save();
+      await transaction1.save();
       await existingUser.save();
       await targetAccount.save();
 
-      res.json({message:"Transfer success"});
+      return res.json({ message: "Transfer success" });
     } else {
-      let flag=false;
-      // Check if the transfer amount is greater than the balance.
-      if (transferAmount > existingUser.balance) {
-        // Loop through all the savings goals.
-        for (const savingGoal of savingGoals) {
-          // Check if the total amount in the savings goal is greater than the transfer amount.
-          if (savingGoal.Total_amount >= transferAmount) {
-            // Debit the transfer amount from the savings goal.
-            savingGoal.Total_amount -= transferAmount;
-            // Create a transaction record for the debit.
-            const transaction = new transactionModel({
-              _id: new mongoose.Types.ObjectId(),
-              username: existingUser.username,
-              transaction_type: "debit",
-              amount: transferAmount,
-              balance: existingUser.balance,
-              sendTo:targetAccount.username,
-              created_at: Date.now(),
-            });
+      let flag = false;
+      for (const savingGoal of savingGoals) {
+        if (savingGoal.Total_amount >= transferAmount) {
+          savingGoal.Total_amount -= transferAmount;
+          targetAccount.balance += transferAmount;
 
-            const transaction1 = new transactionModel({
-              _id: new mongoose.Types.ObjectId(),
-              username: targetAccount.username,
-              transaction_type: "credit",
-              amount: transferAmount,
-              balance: targetAccount.balance,
-              sendTo:targetAccount.username,
-              created_at: Date.now(),
-            });
-            await transaction1.save();
+          const transaction = new transactionModel({
+            _id: new mongoose.Types.ObjectId(),
+            username: existingUser.username,
+            transaction_type: "debit",
+            amount: transferAmount,
+            balance: existingUser.balance,
+            sendTo: targetAccount.username,
+            created_at: Date.now(),
+          });
 
+          const transaction1 = new transactionModel({
+            _id: new mongoose.Types.ObjectId(),
+            username: targetAccount.username,
+            transaction_type: "credit",
+            amount: transferAmount,
+            balance: targetAccount.balance,
+            sendTo: targetAccount.username,
+            created_at: Date.now(),
+          });
 
-            targetAccount.balance+=transferAmount;
-            await transaction.save();
-            await targetAccount.save();
-            // Save the updated savings goal.
-            await savingGoal.save();
-            flag=true;
-            break;
-          }
+          await transaction.save();
+          await transaction1.save();
+          await savingGoal.save();
+          await targetAccount.save();
+
+          flag = true;
+          break;
         }
       }
-      if(flag) return res.json({message:"success"})
-      return res.json({message:"Insufficient Funds"})
+      if (flag) return res.json({ message: "Transfer success" });
+
+      return res.status(400).json({ message: "Insufficient Funds" });
     }
   } catch (err) {
     next(err);
@@ -281,29 +272,50 @@ router.get('/dashboard/all-savings-goal',async(req,res,next)=>{
 });
   
 
-router.get('/dashboard/all-transaction',async(req,res,next)=>{
-  const currentUser=req.user;
-  try{
-    const transaction = await transactionModel.find({ username: currentUser.username }, {limit:100},{
-      projection: {
-        _id:false,
-        transaction_type: true,
-        amount:true,
-        balance:true,
-        sendTo: true,
-        created_at: true,
-      },
+router.get('/dashboard/all-transaction', async (req, res, next) => {
+  const currentUser = req.user; 
+
+  let { page, pageSize } = req.query;
+
+  try {
+    let transactionsQuery = transactionModel.find(
+      { username: currentUser.username },
+      {
+        _id: 0,
+        transaction_type: 1,
+        amount: 1,
+        balance: 1,
+        sendTo: 1,
+        created_at: 1,
+      }
+    ).sort({ created_at: -1 });
+
+    // Apply pagination only if page and pageSize are provided
+    if (page && pageSize) {
+      const skip = (parseInt(page, 10) - 1) * parseInt(pageSize, 10);
+      transactionsQuery = transactionsQuery.skip(skip).limit(parseInt(pageSize, 10));
+    }
+
+    const transactions = await transactionsQuery;
+
+    if (transactions.length === 0) {
+      console.log('No transactions found, sending empty array response.');
+      return res.status(404).json([]); 
+    }
+
+    return res.json({
+      transactions,
+      page: page ? parseInt(page, 10) : null,
+      pageSize: pageSize ? parseInt(pageSize, 10) : null,
     });
 
-    if (!transaction) {
-      res.status(404).json([]);
-      return;
-    }
-    res.json(transaction);
-    }catch(err){
-      next(err);
-    }
+  } catch (err) {
+    console.error('Error occurred:', err); 
+    return next(err);
+  }
 });
+
+
 
 ///tested api above///////////////////////////////////////////////
 router.patch('/dashboard/update-money-saving-goal', async (req, res, next) => {
@@ -380,15 +392,14 @@ router.patch('/dashboard/withdrwal-money-sg', async (req, res, next) => {
     if(!existingUser){
       throw new Error()
     }
-
-    existingUser.balance+=savingGoal.Total_amount;
+    const amountToCredit=savingGoal.Total_amount;
+    existingUser.balance+=amountToCredit;
     savingGoal.Total_amount=0;
-
     const transaction=new transactionModel({
       _id: new mongoose.Types.ObjectId(),
        username:currentUser.username,
        transaction_type: "credit",
-       amount: savingGoal.Total_amount,
+       amount: amountToCredit,
        balance: existingUser.balance,
        sendTo:"goal_name withdrawal",
        created_at: Date.now(),

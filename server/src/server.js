@@ -5,6 +5,9 @@ import mongoose from 'mongoose';
 import cors from 'cors'
 import { createNewUser, signin } from './handlers/users.js';
 import { DeleteCustomer, updateBalance } from './handlers/admin.js';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const app=express();
 
