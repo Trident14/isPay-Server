@@ -1,12 +1,10 @@
-
 {
-  "scripts": {
-      "start": "node src/index.js"
-    },
-  "types": "module",
   "name": "server",
   "version": "1.0.0",
   "description": "",
+  "scripts": {
+    "start": "node src/index.js"
+  },
   "type": "module",
   "author": "",
   "license": "ISC",
